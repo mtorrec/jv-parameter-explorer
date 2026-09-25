@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Perovskite solar-cell JV explorer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root {
+    --fg: #111;
+    --muted: #666;
+    --border: #d0d0d0;
+    --bad: #d55e00;
+    --good: #009e73;
+    --live: #0072b2;
+  }
+  html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;
+               color: var(--fg); background: #fafafa; font-size: 14px; }
+  header { padding: 16px 22px 4px; }
+  header h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  main { display: grid; grid-template-columns: 320px 1fr; gap: 22px;
+         padding: 12px 22px 22px; max-width: 1300px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: white; border: 1px solid var(--border);
+           border-radius: 6px; padding: 14px 16px; }
+  .panel h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+
+  .control { margin-bottom: 14px; }
+  .control label { display: block; font-size: 13px; font-weight: 500;
+                   margin-bottom: 4px; }
+  .control .val { color: var(--live); font-weight: 600; margin-left: 4px; }
+  .control input[type=range] { width: 100%; }
+  .control .ticks { display: flex; justify-content: space-between;
+                    font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .control select { width: 100%; padding: 5px; font-size: 13px;
+                    border: 1px solid var(--border); border-radius: 4px; }
+
+  .kf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+        margin: 10px 0 4px; text-align: center; }
+  .kf .box { border: 1px solid var(--border); border-radius: 4px;
+             padding: 6px 4px; background: #fdfdfd; }
+  .kf .box .lbl { font-size: 11px; color: var(--muted); }
+  .kf .box .num { font-size: 15px; font-weight: 600; color: var(--live); }
+
+  .progress { margin-top: 10px; }
+  .progress .bar { height: 10px; background: #eee; border-radius: 5px;
+                   overflow: hidden; border: 1px solid var(--border); }
+  .progress .fill { height: 100%; background: linear-gradient(90deg,
+                    var(--bad), #f0e442, var(--good)); width: 0%;
+                    transition: width 0.15s ease; }
+  .progress .txt { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  .buttons { display: flex; gap: 8px; margin-top: 10px; }
+  .buttons button { flex: 1; padding: 7px 8px; font-size: 12px;
+                    border: 1px solid var(--border); background: white;
+                    border-radius: 4px; cursor: pointer; }
+  .buttons button:hover { background: #f0f0f0; }
+  .buttons button.bad  { border-color: var(--bad);  color: var(--bad); }
+  .buttons button.good { border-color: var(--good); color: var(--good); }
+
+  .plotwrap { background: white; border: 1px solid var(--border);
+              border-radius: 6px; padding: 8px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px;
+         font-size: 12px; }
+  footer { padding: 8px 22px 22px; color: var(--muted); font-size: 12px; }
+  footer a { color: var(--live); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Perovskite solar-cell JV explorer</h1>
+  <p>Drag the sliders to fix the five things wrong with the bad-start device
+     and reach the ideal target. All curves come from pre-computed
+     Setfos&nbsp;6.0 drift-diffusion simulations of a fixed device stack:
+     glass / ITO / ETL (5 nm) / absorber / HTL (5 nm) / Au.</p>
+</header>
+
+<main>
+
+  <div class="panel">
+    <h2>Absorber parameters</h2>
+
+    <div class="control">
+      <label>Bandgap <span class="val" id="egVal"></span></label>
+      <select id="egSel"></select>
+      <div class="ticks"><span>low</span><span>medium</span><span>high</span></div>
+    </div>
+
+    <div class="control">
+      <label>Absorber thickness <span class="val" id="LVal"></span></label>
+      <input type="range" id="LSel" min="0" max="3" step="1">
+      <div class="ticks" id="LTicks"></div>
+    </div>
+
+    <div class="control">
+      <label>Bulk SRH lifetime &tau; <span class="val" id="tauVal"></span></label>
+      <input type="range" id="tauSel" min="0" max="3" step="1">
+      <div class="ticks" id="tauTicks"></div>
+    </div>
+
+    <div class="control">
+      <label>Interface recombination S <span class="val" id="SVal"></span></label>
+      <input type="range" id="SSel" min="0" max="3" step="1">
+      <div class="ticks" id="STicks"></div>
+    </div>
+
+    <div class="control">
+      <label>Bulk mobility &mu; <span class="val" id="muVal"></span></label>
+      <input type="range" id="muSel" min="0" max="1" step="1">
+      <div class="ticks" id="muTicks"></div>
+    </div>
+
+    <div class="buttons">
+      <button class="bad"  id="setBad">Reset to bad</button>
+      <button class="good" id="setIdeal">Set to ideal</button>
+    </div>
+
+    <div class="kf">
+      <div class="box"><div class="lbl">J<sub>sc</sub> (mA/cm&sup2;)</div><div class="num" id="kfJsc">–</div></div>
+      <div class="box"><div class="lbl">V<sub>oc</sub> (V)</div><div class="num" id="kfVoc">–</div></div>
+      <div class="box"><div class="lbl">FF</div><div class="num" id="kfFF">–</div></div>
+      <div class="box"><div class="lbl">PCE (%)</div><div class="num" id="kfPCE">–</div></div>
+    </div>
+
+    <div class="progress">
+      <div class="bar"><div class="fill" id="progFill"></div></div>
+      <div class="txt" id="progTxt">Progress toward ideal PCE</div>
+    </div>
+
+    <p class="hint">Bad-start (red) and ideal-target (green) reference curves
+       are always shown for comparison. Your current parameter choice is the
+       blue curve.</p>
+  </div>
+
+  <div class="plotwrap">
+    <div id="plot" style="width:100%;height:600px;"></div>
+  </div>
+
+</main>
+
+<footer>
+  Backing data: 384 Setfos JVs (3 &times; 4 &times; 4 &times; 4 &times; 2).
+  Source: <a href="https://github.com/mtorrec/jv-parameter-explorer">
+    github.com/mtorrec/jv-parameter-explorer</a>.
+</footer>
+
+<script>
+const fmt = (x, n = 2) => (x === null || x === undefined || !isFinite(x))
+  ? "–" : Number(x).toFixed(n);
+
+const sci = (x) => {
+  if (x === 0) return "0";
+  const e = Math.floor(Math.log10(Math.abs(x)));
+  const m = x / Math.pow(10, e);
+  if (Math.abs(m - Math.round(m)) < 1e-6) return `10${supScript(e)}`;
+  return `${m.toFixed(1)}×10${supScript(e)}`;
+};
+const supScript = (n) => {
+  const map = {"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴",
+               "5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"};
+  return String(n).split("").map(c => map[c] || c).join("");
+};
+
+let GRID = null;
+let state = { eg: null, L: null, tau: null, S: null, mu: null };
+
+async function loadGrid() {
+  const r = await fetch("grid.json");
+  GRID = await r.json();
+  initControls();
+  setFromKey(GRID.meta.bad_key);
+  buildPlot();
+  update();
+}
+
+function initControls() {
+  const egSel = document.getElementById("egSel");
+  GRID.meta.Eg.forEach(o => {
+    const opt = document.createElement("option");
+    opt.value = o.label;
+    opt.textContent = `${o.label} (Eg = ${o.value.toFixed(2)} eV)`;
+    egSel.appendChild(opt);
+  });
+  egSel.onchange = () => { state.eg = egSel.value; update(); };
+
+  const bind = (id, arr, fmtFn, ticksId) => {
+    const el = document.getElementById(id);
+    el.max = arr.length - 1;
+    el.oninput = () => update();
+    const t = document.getElementById(ticksId);
+    if (t) t.innerHTML = arr.map(v => `<span>${fmtFn(v)}</span>`).join("");
+  };
+  bind("LSel",   GRID.meta.L,   v => `${v}`,       "LTicks");
+  bind("tauSel", GRID.meta.tau, v => `${v}`,       "tauTicks");
+  bind("SSel",   GRID.meta.S,   v => sci(v),       "STicks");
+  bind("muSel",  GRID.meta.mu,  v => `${v}`,       "muTicks");
+
+  document.getElementById("setBad").onclick   = () => { setFromKey(GRID.meta.bad_key);   update(); };
+  document.getElementById("setIdeal").onclick = () => { setFromKey(GRID.meta.ideal_key); update(); };
+}
+
+function setFromKey(key) {
+  const [eg, L, tau, S, mu] = key.split("|");
+  document.getElementById("egSel").value = eg;
+  document.getElementById("LSel").value   = GRID.meta.L.indexOf(  parseFloat(L));
+  document.getElementById("tauSel").value = GRID.meta.tau.indexOf(parseFloat(tau));
+  document.getElementById("SSel").value   = GRID.meta.S.indexOf(  parseFloat(S));
+  document.getElementById("muSel").value  = GRID.meta.mu.indexOf( parseFloat(mu));
+}
+
+function currentKey() {
+  const eg  = document.getElementById("egSel").value;
+  const L   = GRID.meta.L[  +document.getElementById("LSel").value];
+  const tau = GRID.meta.tau[+document.getElementById("tauSel").value];
+  const S   = GRID.meta.S[  +document.getElementById("SSel").value];
+  const mu  = GRID.meta.mu[ +document.getElementById("muSel").value];
+  const gg  = (x) => x.toString();
+  return { key: `${eg}|${gg(L)}|${gg(tau)}|${gg(S)}|${gg(mu)}`,
+           eg, L, tau, S, mu };
+}
+
+function jvToP(V, J) {
+  return V.map((v, i) => v >= 0 ? -v * J[i] : NaN);
+}
+
+function buildPlot() {
+  const V = GRID.V;
+  const bad   = GRID.runs[GRID.meta.bad_key];
+  const ideal = GRID.runs[GRID.meta.ideal_key];
+
+  const traces = [
+    { x: V, y: bad.J, name: "Bad start", xaxis: "x", yaxis: "y2",
+      line: { color: "#d55e00", width: 1.2, dash: "dot" }, hoverinfo: "name" },
+    { x: V, y: jvToP(V, bad.J), name: "Bad start (P)",
+      xaxis: "x", yaxis: "y", line: { color: "#d55e00", width: 1.2, dash: "dot" },
+      showlegend: false, hoverinfo: "skip" },
+    { x: V, y: ideal.J, name: "Ideal target", xaxis: "x", yaxis: "y2",
+      line: { color: "#009e73", width: 1.2, dash: "dot" }, hoverinfo: "name" },
+    { x: V, y: jvToP(V, ideal.J), name: "Ideal target (P)",
+      xaxis: "x", yaxis: "y", line: { color: "#009e73", width: 1.2, dash: "dot" },
+      showlegend: false, hoverinfo: "skip" },
+    { x: V, y: bad.J, name: "Your device", xaxis: "x", yaxis: "y2",
+      line: { color: "#0072b2", width: 2.4 } },
+    { x: V, y: jvToP(V, bad.J), name: "Your device (P)",
+      xaxis: "x", yaxis: "y", line: { color: "#0072b2", width: 2.4 },
+      showlegend: false, hoverinfo: "skip" },
+  ];
+
+  const layout = {
+    grid: { rows: 2, columns: 1, subplots: [["xy"], ["xy2"]],
+            roworder: "top to bottom" },
+    xaxis:  { domain: [0.08, 0.98], anchor: "y2", range: [-0.05, 1.5],
+              title: "V (V)", showline: true, mirror: true, ticks: "inside",
+              zeroline: false },
+    yaxis:  { domain: [0.66, 0.98], anchor: "x", range: [0, 30],
+              title: "P (mW/cm²)", showline: true, mirror: true, ticks: "inside",
+              zeroline: false },
+    yaxis2: { domain: [0.08, 0.60], anchor: "x", range: [-30, 3],
+              title: "J (mA/cm²)", showline: true, mirror: true, ticks: "inside",
+              zeroline: false },
+    shapes: [
+      { type: "line", xref: "x", yref: "y",  x0: 0, x1: 1.5, y0: 0, y1: 0,
+        line: { color: "#888", width: 0.5 } },
+      { type: "line", xref: "x", yref: "y2", x0: 0, x1: 1.5, y0: 0, y1: 0,
+        line: { color: "#888", width: 0.5 } },
+      { type: "line", xref: "x", yref: "y2", x0: 0, x1: 0, y0: -30, y1: 3,
+        line: { color: "#888", width: 0.5 } },
+    ],
+    margin: { l: 60, r: 20, t: 30, b: 45 },
+    legend: { x: 0.72, y: 0.98, xanchor: "left", yanchor: "top",
+              bgcolor: "rgba(255,255,255,0.9)", bordercolor: "#ccc",
+              borderwidth: 1 },
+    font: { family: "Arial", size: 12, color: "#111" },
+    plot_bgcolor: "white", paper_bgcolor: "white",
+    hovermode: "x unified",
+  };
+
+  Plotly.newPlot("plot", traces, layout,
+                 { responsive: true, displayModeBar: false });
+}
+
+function update() {
+  const cur = currentKey();
+  state = cur;
+  const run = GRID.runs[cur.key];
+
+  document.getElementById("egVal").textContent =
+    `${GRID.meta.Eg.find(e => e.label === cur.eg).value.toFixed(2)} eV`;
+  document.getElementById("LVal").textContent   = `${cur.L} nm`;
+  document.getElementById("tauVal").textContent = `${cur.tau} ns`;
+  document.getElementById("SVal").textContent   = `${sci(cur.S)} cm/s`;
+  document.getElementById("muVal").textContent  = `${cur.mu} cm² V⁻¹ s⁻¹`;
+
+  if (!run) {
+    document.getElementById("kfJsc").textContent = "n/a";
+    document.getElementById("kfVoc").textContent = "n/a";
+    document.getElementById("kfFF").textContent  = "n/a";
+    document.getElementById("kfPCE").textContent = "n/a";
+    return;
+  }
+
+  document.getElementById("kfJsc").textContent = fmt(run.Jsc, 2);
+  document.getElementById("kfVoc").textContent = fmt(run.Voc, 3);
+  document.getElementById("kfFF").textContent  = fmt(run.FF,  3);
+  document.getElementById("kfPCE").textContent = fmt(run.PCE, 2);
+
+  const V = GRID.V;
+  Plotly.restyle("plot",
+    { y: [run.J,          jvToP(V, run.J)] },
+    [4, 5]);
+
+  const bad = GRID.runs[GRID.meta.bad_key].PCE;
+  const ideal = GRID.runs[GRID.meta.ideal_key].PCE;
+  const frac = Math.max(0, Math.min(1, (run.PCE - bad) / (ideal - bad)));
+  document.getElementById("progFill").style.width = `${(frac * 100).toFixed(1)}%`;
+  document.getElementById("progTxt").textContent =
+    `PCE: ${run.PCE.toFixed(2)}%   (bad ${bad.toFixed(1)}% → ideal ${ideal.toFixed(1)}%)`;
+}
+
+loadGrid();
+</script>
+
+</body>
+</html>
