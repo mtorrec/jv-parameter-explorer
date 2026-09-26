@@ -311,8 +311,8 @@ async function loadAll() {
   EXTRAS = e;
   initControls();
   setFromKey(GRID.meta.bad_key);
-  document.getElementById("RsSel").value  = 0;                     // Rs = 0 (best)
-  document.getElementById("RshSel").value = RSH_LIST.length - 1;   // Rsh = ∞ (best)
+  document.getElementById("RsSel").value  = RS_LIST.indexOf(5);     // Rs = 5 Ω·cm²
+  document.getElementById("RshSel").value = RSH_LIST.indexOf(100);  // Rsh = 100 Ω·cm²
   buildJVPlot();
   buildAbsPlot();
   drawEnergyDiagram(currentKey().egEv);
@@ -339,8 +339,8 @@ function initControls() {
 
   document.getElementById("setBad").onclick = () => {
     setFromKey(GRID.meta.bad_key);
-    document.getElementById("RsSel").value  = 0;                     // Rs = 0 (best)
-    document.getElementById("RshSel").value = RSH_LIST.length - 1;   // Rsh = ∞ (best)
+    document.getElementById("RsSel").value  = RS_LIST.indexOf(5);
+    document.getElementById("RshSel").value = RSH_LIST.indexOf(100);
     update();
   };
 
