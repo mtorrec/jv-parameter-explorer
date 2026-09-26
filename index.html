@@ -303,9 +303,11 @@ function keyFig(V, J) {
 }
 
 async function loadAll() {
+  // Cache-buster: force browsers to re-fetch on every page load.
+  const v = "?v=" + Date.now();
   const [g, e] = await Promise.all([
-    fetch("grid.json").then(r => r.json()),
-    fetch("extras.json").then(r => r.json()),
+    fetch("grid.json" + v).then(r => r.json()),
+    fetch("extras.json" + v).then(r => r.json()),
   ]);
   GRID = g;
   EXTRAS = e;
