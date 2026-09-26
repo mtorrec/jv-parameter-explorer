@@ -166,7 +166,7 @@
 
     <div class="progress">
       <div class="bar"><div class="fill" id="progFill"></div></div>
-      <div class="txt" id="progTxt">Progress toward ideal PCE</div>
+      <div class="txt" id="progTxt">PCE (0 – 30 %)</div>
     </div>
 
     <p class="hint">Your current device is the blue curve. Click
@@ -578,12 +578,11 @@ function update() {
     { x: [Vt, Vt], y: [Jt, jvToP(Vt, Jt)] },
     [2, 3]);
 
-  const bad = GRID.runs[GRID.meta.bad_key].PCE;
-  const ideal = GRID.runs[GRID.meta.ideal_key].PCE;
-  const frac = Math.max(0, Math.min(1, (kf.PCE - bad) / (ideal - bad)));
+  const PCE_MAX = 30;
+  const frac = Math.max(0, Math.min(1, kf.PCE / PCE_MAX));
   document.getElementById("progFill").style.width = `${(frac * 100).toFixed(1)}%`;
   document.getElementById("progTxt").textContent =
-    `PCE: ${kf.PCE.toFixed(2)}%   (bad ${bad.toFixed(1)}% → ideal ${ideal.toFixed(1)}%)`;
+    `PCE: ${kf.PCE.toFixed(2)} %   (0 – ${PCE_MAX} %)`;
 }
 
 loadAll();
