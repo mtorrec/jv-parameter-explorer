@@ -140,6 +140,20 @@
       <div class="ticks" id="muTicks"></div>
     </div>
 
+    <h2 style="margin-top:10px;">Parasitic resistances</h2>
+
+    <div class="control">
+      <label>Series resistance R<sub>s</sub> <span class="val" id="RsVal"></span></label>
+      <input type="range" id="RsSel" min="0" max="3" step="1">
+      <div class="ticks" id="RsTicks"></div>
+    </div>
+
+    <div class="control">
+      <label>Shunt resistance R<sub>sh</sub> <span class="val" id="RshVal"></span></label>
+      <input type="range" id="RshSel" min="0" max="3" step="1">
+      <div class="ticks" id="RshTicks"></div>
+    </div>
+
     <div class="buttons">
       <button class="bad"  id="setBad">Reset to bad</button>
       <button class="good" id="setIdeal">Set to ideal</button>
@@ -199,6 +213,60 @@ const sci = (x) => {
 let GRID = null;
 let EXTRAS = null;
 
+// Rs / Rsh are applied purely as post-processing on the intrinsic (V,J).
+// Values in Ohm*cm^2. Rsh = Infinity = no shunt.
+const RS_LIST  = [0, 2, 5, 10];
+const RSH_LIST = [Infinity, 500, 100, 50];
+
+// Apply series + shunt to an intrinsic (V_int in V, J_int in mA/cm^2).
+// V_terminal = V_int + J_after * Rs / 1000
+// J_after    = J_int + 1000 * V_int / Rsh
+function applyRsRsh(V, J, Rs, Rsh) {
+  const N = V.length;
+  const Vt = new Array(N);
+  const Jt = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const Jshunt = isFinite(Rsh) ? 1000 * V[i] / Rsh : 0;
+    const Jafter = J[i] + Jshunt;
+    Vt[i] = V[i] + Jafter * Rs / 1000;
+    Jt[i] = Jafter;
+  }
+  return { V: Vt, J: Jt };
+}
+
+// Compute Jsc, Voc, FF, PCE from a (V, J) curve.
+function keyFig(V, J) {
+  const N = V.length;
+  // Interpolate Jsc at V=0
+  let Jsc = NaN;
+  for (let i = 0; i < N - 1; i++) {
+    if ((V[i] <= 0 && V[i + 1] >= 0) || (V[i] >= 0 && V[i + 1] <= 0)) {
+      const t = (0 - V[i]) / (V[i + 1] - V[i]);
+      Jsc = J[i] + t * (J[i + 1] - J[i]);
+      break;
+    }
+  }
+  // Voc where J crosses zero (sorted by V ascending)
+  let Voc = NaN;
+  for (let i = 0; i < N - 1; i++) {
+    if (J[i] < 0 && J[i + 1] >= 0) {
+      const t = (0 - J[i]) / (J[i + 1] - J[i]);
+      Voc = V[i] + t * (V[i + 1] - V[i]);
+      break;
+    }
+  }
+  // MPP scanning positive V
+  let MPP = 0;
+  for (let i = 0; i < N; i++) {
+    if (V[i] >= 0) {
+      const P = -V[i] * J[i];
+      if (P > MPP) MPP = P;
+    }
+  }
+  const FF = (isFinite(Voc) && Jsc < 0) ? MPP / (-Jsc * Voc) : NaN;
+  return { Jsc, Voc, FF, PCE: MPP };
+}
+
 async function loadAll() {
   const [g, e] = await Promise.all([
     fetch("grid.json").then(r => r.json()),
@@ -229,9 +297,21 @@ function initControls() {
   bind("tauSel", GRID.meta.tau,   v => `${v}`,            "tauTicks");
   bind("SSel",   GRID.meta.S,     v => sci(v),            "STicks");
   bind("muSel",  GRID.meta.mu,    v => `${v}`,            "muTicks");
+  bind("RsSel",  RS_LIST,         v => `${v}`,            "RsTicks");
+  bind("RshSel", RSH_LIST,        v => isFinite(v) ? `${v}` : "∞", "RshTicks");
 
-  document.getElementById("setBad").onclick   = () => { setFromKey(GRID.meta.bad_key);   update(); };
-  document.getElementById("setIdeal").onclick = () => { setFromKey(GRID.meta.ideal_key); update(); };
+  document.getElementById("setBad").onclick   = () => {
+    setFromKey(GRID.meta.bad_key);
+    document.getElementById("RsSel").value  = 0;
+    document.getElementById("RshSel").value = 0;
+    update();
+  };
+  document.getElementById("setIdeal").onclick = () => {
+    setFromKey(GRID.meta.ideal_key);
+    document.getElementById("RsSel").value  = 0;
+    document.getElementById("RshSel").value = 0;
+    update();
+  };
 }
 
 function setFromKey(key) {
@@ -250,10 +330,12 @@ function currentKey() {
   const tau = GRID.meta.tau[+document.getElementById("tauSel").value];
   const S   = GRID.meta.S[  +document.getElementById("SSel").value];
   const mu  = GRID.meta.mu[ +document.getElementById("muSel").value];
+  const Rs  = RS_LIST[  +document.getElementById("RsSel").value];
+  const Rsh = RSH_LIST[ +document.getElementById("RshSel").value];
   const gg  = (x) => x.toString();
   return {
     key: `${egMeta.label}|${gg(L)}|${gg(tau)}|${gg(S)}|${gg(mu)}`,
-    egLabel: egMeta.label, egEv: egMeta.value, L, tau, S, mu,
+    egLabel: egMeta.label, egEv: egMeta.value, L, tau, S, mu, Rs, Rsh,
   };
 }
 
@@ -464,11 +546,12 @@ function update() {
   document.getElementById("tauVal").textContent = `${cur.tau} ns`;
   document.getElementById("SVal").textContent   = `${sci(cur.S)} cm/s`;
   document.getElementById("muVal").textContent  = `${cur.mu} cm² V⁻¹ s⁻¹`;
+  document.getElementById("RsVal").textContent  = `${cur.Rs} Ω cm²`;
+  document.getElementById("RshVal").textContent =
+    isFinite(cur.Rsh) ? `${cur.Rsh} Ω cm²` : "∞";
 
-  // Update energy diagram
   drawEnergyDiagram(cur.egEv);
 
-  // Update absorptance overlay
   const A = EXTRAS.absorptance[cur.egLabel].A;
   const am = EXTRAS.am15g;
   const absorbed = am.map((v, i) => v * A[i]);
@@ -482,20 +565,25 @@ function update() {
     return;
   }
 
-  document.getElementById("kfJsc").textContent = fmt(run.Jsc, 2);
-  document.getElementById("kfVoc").textContent = fmt(run.Voc, 3);
-  document.getElementById("kfFF").textContent  = fmt(run.FF,  3);
-  document.getElementById("kfPCE").textContent = fmt(run.PCE, 2);
+  // Apply Rs / Rsh post-processing to the intrinsic curve.
+  const { V: Vt, J: Jt } = applyRsRsh(GRID.V, run.J, cur.Rs, cur.Rsh);
+  const kf = keyFig(Vt, Jt);
 
-  const V = GRID.V;
-  Plotly.restyle("plot", { y: [run.J, jvToP(V, run.J)] }, [4, 5]);
+  document.getElementById("kfJsc").textContent = fmt(kf.Jsc, 2);
+  document.getElementById("kfVoc").textContent = fmt(kf.Voc, 3);
+  document.getElementById("kfFF").textContent  = fmt(kf.FF,  3);
+  document.getElementById("kfPCE").textContent = fmt(kf.PCE, 2);
+
+  Plotly.restyle("plot",
+    { x: [Vt, Vt], y: [Jt, jvToP(Vt, Jt)] },
+    [4, 5]);
 
   const bad = GRID.runs[GRID.meta.bad_key].PCE;
   const ideal = GRID.runs[GRID.meta.ideal_key].PCE;
-  const frac = Math.max(0, Math.min(1, (run.PCE - bad) / (ideal - bad)));
+  const frac = Math.max(0, Math.min(1, (kf.PCE - bad) / (ideal - bad)));
   document.getElementById("progFill").style.width = `${(frac * 100).toFixed(1)}%`;
   document.getElementById("progTxt").textContent =
-    `PCE: ${run.PCE.toFixed(2)}%   (bad ${bad.toFixed(1)}% → ideal ${ideal.toFixed(1)}%)`;
+    `PCE: ${kf.PCE.toFixed(2)}%   (bad ${bad.toFixed(1)}% → ideal ${ideal.toFixed(1)}%)`;
 }
 
 loadAll();
