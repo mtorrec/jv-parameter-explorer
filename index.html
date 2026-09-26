@@ -13,6 +13,11 @@
     --bad: #d55e00;
     --good: #009e73;
     --live: #0072b2;
+    --tco: #b0abd6;
+    --etl: #a7dbb5;
+    --abs: #7a5b93;
+    --htl: #f2c58c;
+    --au:  #e9c53a;
   }
   html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;
                color: var(--fg); background: #fafafa; font-size: 14px; }
@@ -20,9 +25,22 @@
   header h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
   header p { margin: 0; color: var(--muted); font-size: 13px; }
 
+  /* Schematic row: device stack image + live energy diagram */
+  .schematic { display: grid; grid-template-columns: 1fr 2fr; gap: 22px;
+               padding: 12px 22px; max-width: 1400px; align-items: stretch; }
+  .schematic .card { background: white; border: 1px solid var(--border);
+                     border-radius: 6px; padding: 8px; display: flex;
+                     flex-direction: column; align-items: center; }
+  .schematic .card .cap { font-size: 12px; color: var(--muted);
+                          margin: 4px 0 6px; font-weight: 500; }
+  .schematic img { max-width: 100%; max-height: 320px; height: auto; }
+  #ediagram { width: 100%; height: 320px; }
+
   main { display: grid; grid-template-columns: 320px 1fr; gap: 22px;
-         padding: 12px 22px 22px; max-width: 1300px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+         padding: 4px 22px 22px; max-width: 1400px; }
+  @media (max-width: 1000px) {
+    main, .schematic { grid-template-columns: 1fr; }
+  }
 
   .panel { background: white; border: 1px solid var(--border);
            border-radius: 6px; padding: 14px 16px; }
@@ -35,8 +53,6 @@
   .control input[type=range] { width: 100%; }
   .control .ticks { display: flex; justify-content: space-between;
                     font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .control select { width: 100%; padding: 5px; font-size: 13px;
-                    border: 1px solid var(--border); border-radius: 4px; }
 
   .kf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
         margin: 10px 0 4px; text-align: center; }
@@ -61,11 +77,10 @@
   .buttons button.bad  { border-color: var(--bad);  color: var(--bad); }
   .buttons button.good { border-color: var(--good); color: var(--good); }
 
+  .plots { display: grid; grid-template-rows: auto auto; gap: 12px; }
   .plotwrap { background: white; border: 1px solid var(--border);
               border-radius: 6px; padding: 8px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
-  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px;
-         font-size: 12px; }
   footer { padding: 8px 22px 22px; color: var(--muted); font-size: 12px; }
   footer a { color: var(--live); }
 </style>
@@ -74,11 +89,21 @@
 
 <header>
   <h1>Perovskite solar-cell JV explorer</h1>
-  <p>Drag the sliders to fix the five things wrong with the bad-start device
-     and reach the ideal target. All curves come from pre-computed
-     Setfos&nbsp;6.0 drift-diffusion simulations of a fixed device stack:
-     glass / ITO / ETL (5 nm) / absorber / HTL (5 nm) / Au.</p>
+  <p>Drag the sliders to fix the five deliberate flaws in the bad-start
+     device and reach the ideal target. Curves come from pre-computed
+     Setfos&nbsp;6.0 drift-diffusion simulations.</p>
 </header>
+
+<section class="schematic">
+  <div class="card">
+    <div class="cap">Device stack</div>
+    <img src="device_stack.png" alt="device stack schematic">
+  </div>
+  <div class="card">
+    <div class="cap">Energy-level diagram (updates with bandgap)</div>
+    <svg id="ediagram" viewBox="0 0 600 320" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+</section>
 
 <main>
 
@@ -87,8 +112,8 @@
 
     <div class="control">
       <label>Bandgap <span class="val" id="egVal"></span></label>
-      <select id="egSel"></select>
-      <div class="ticks"><span>low</span><span>medium</span><span>high</span></div>
+      <input type="range" id="egSel" min="0" max="2" step="1">
+      <div class="ticks" id="egTicks"></div>
     </div>
 
     <div class="control">
@@ -133,26 +158,35 @@
     </div>
 
     <p class="hint">Bad-start (red) and ideal-target (green) reference curves
-       are always shown for comparison. Your current parameter choice is the
-       blue curve.</p>
+       are always shown. Your current choice is the blue curve.</p>
   </div>
 
-  <div class="plotwrap">
-    <div id="plot" style="width:100%;height:600px;"></div>
+  <div class="plots">
+    <div class="plotwrap">
+      <div id="plot" style="width:100%;height:500px;"></div>
+    </div>
+    <div class="plotwrap">
+      <div id="absplot" style="width:100%;height:280px;"></div>
+    </div>
   </div>
 
 </main>
 
 <footer>
-  Backing data: 384 Setfos JVs (3 &times; 4 &times; 4 &times; 4 &times; 2).
+  Backing data: 384 Setfos JVs (3 &times; 4 &times; 4 &times; 4 &times; 2) and
+  three transfer-matrix absorptance spectra.
   Source: <a href="https://github.com/mtorrec/jv-parameter-explorer">
     github.com/mtorrec/jv-parameter-explorer</a>.
 </footer>
 
 <script>
+// ------------- utilities -------------
 const fmt = (x, n = 2) => (x === null || x === undefined || !isFinite(x))
   ? "–" : Number(x).toFixed(n);
 
+const supMap = {"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴",
+                "5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"};
+const supScript = (n) => String(n).split("").map(c => supMap[c] || c).join("");
 const sci = (x) => {
   if (x === 0) return "0";
   const e = Math.floor(Math.log10(Math.abs(x)));
@@ -160,34 +194,28 @@ const sci = (x) => {
   if (Math.abs(m - Math.round(m)) < 1e-6) return `10${supScript(e)}`;
   return `${m.toFixed(1)}×10${supScript(e)}`;
 };
-const supScript = (n) => {
-  const map = {"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴",
-               "5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"};
-  return String(n).split("").map(c => map[c] || c).join("");
-};
 
+// ------------- state -------------
 let GRID = null;
-let state = { eg: null, L: null, tau: null, S: null, mu: null };
+let EXTRAS = null;
 
-async function loadGrid() {
-  const r = await fetch("grid.json");
-  GRID = await r.json();
+async function loadAll() {
+  const [g, e] = await Promise.all([
+    fetch("grid.json").then(r => r.json()),
+    fetch("extras.json").then(r => r.json()),
+  ]);
+  GRID = g;
+  EXTRAS = e;
   initControls();
   setFromKey(GRID.meta.bad_key);
-  buildPlot();
+  buildJVPlot();
+  buildAbsPlot();
+  drawEnergyDiagram(currentKey().egEv);
   update();
 }
 
+// ------------- controls -------------
 function initControls() {
-  const egSel = document.getElementById("egSel");
-  GRID.meta.Eg.forEach(o => {
-    const opt = document.createElement("option");
-    opt.value = o.label;
-    opt.textContent = `${o.label} (Eg = ${o.value.toFixed(2)} eV)`;
-    egSel.appendChild(opt);
-  });
-  egSel.onchange = () => { state.eg = egSel.value; update(); };
-
   const bind = (id, arr, fmtFn, ticksId) => {
     const el = document.getElementById(id);
     el.max = arr.length - 1;
@@ -195,10 +223,12 @@ function initControls() {
     const t = document.getElementById(ticksId);
     if (t) t.innerHTML = arr.map(v => `<span>${fmtFn(v)}</span>`).join("");
   };
-  bind("LSel",   GRID.meta.L,   v => `${v}`,       "LTicks");
-  bind("tauSel", GRID.meta.tau, v => `${v}`,       "tauTicks");
-  bind("SSel",   GRID.meta.S,   v => sci(v),       "STicks");
-  bind("muSel",  GRID.meta.mu,  v => `${v}`,       "muTicks");
+  bind("egSel",  GRID.meta.Eg.map(o => o.value),
+                                  v => `${v.toFixed(2)}`, "egTicks");
+  bind("LSel",   GRID.meta.L,     v => `${v}`,            "LTicks");
+  bind("tauSel", GRID.meta.tau,   v => `${v}`,            "tauTicks");
+  bind("SSel",   GRID.meta.S,     v => sci(v),            "STicks");
+  bind("muSel",  GRID.meta.mu,    v => `${v}`,            "muTicks");
 
   document.getElementById("setBad").onclick   = () => { setFromKey(GRID.meta.bad_key);   update(); };
   document.getElementById("setIdeal").onclick = () => { setFromKey(GRID.meta.ideal_key); update(); };
@@ -206,7 +236,8 @@ function initControls() {
 
 function setFromKey(key) {
   const [eg, L, tau, S, mu] = key.split("|");
-  document.getElementById("egSel").value = eg;
+  const egIdx = GRID.meta.Eg.findIndex(o => o.label === eg);
+  document.getElementById("egSel").value  = egIdx;
   document.getElementById("LSel").value   = GRID.meta.L.indexOf(  parseFloat(L));
   document.getElementById("tauSel").value = GRID.meta.tau.indexOf(parseFloat(tau));
   document.getElementById("SSel").value   = GRID.meta.S.indexOf(  parseFloat(S));
@@ -214,21 +245,24 @@ function setFromKey(key) {
 }
 
 function currentKey() {
-  const eg  = document.getElementById("egSel").value;
+  const egMeta = GRID.meta.Eg[+document.getElementById("egSel").value];
   const L   = GRID.meta.L[  +document.getElementById("LSel").value];
   const tau = GRID.meta.tau[+document.getElementById("tauSel").value];
   const S   = GRID.meta.S[  +document.getElementById("SSel").value];
   const mu  = GRID.meta.mu[ +document.getElementById("muSel").value];
   const gg  = (x) => x.toString();
-  return { key: `${eg}|${gg(L)}|${gg(tau)}|${gg(S)}|${gg(mu)}`,
-           eg, L, tau, S, mu };
+  return {
+    key: `${egMeta.label}|${gg(L)}|${gg(tau)}|${gg(S)}|${gg(mu)}`,
+    egLabel: egMeta.label, egEv: egMeta.value, L, tau, S, mu,
+  };
 }
 
+// ------------- JV / power plot -------------
 function jvToP(V, J) {
   return V.map((v, i) => v >= 0 ? -v * J[i] : NaN);
 }
 
-function buildPlot() {
+function buildJVPlot() {
   const V = GRID.V;
   const bad   = GRID.runs[GRID.meta.bad_key];
   const ideal = GRID.runs[GRID.meta.ideal_key];
@@ -264,14 +298,12 @@ function buildPlot() {
               title: "J (mA/cm²)", showline: true, mirror: true, ticks: "inside",
               zeroline: false },
     shapes: [
-      { type: "line", xref: "x", yref: "y",  x0: 0, x1: 1.5, y0: 0, y1: 0,
-        line: { color: "#888", width: 0.5 } },
-      { type: "line", xref: "x", yref: "y2", x0: 0, x1: 1.5, y0: 0, y1: 0,
+      { type: "line", xref: "x", yref: "y2", x0: -0.05, x1: 1.5, y0: 0, y1: 0,
         line: { color: "#888", width: 0.5 } },
       { type: "line", xref: "x", yref: "y2", x0: 0, x1: 0, y0: -30, y1: 3,
         line: { color: "#888", width: 0.5 } },
     ],
-    margin: { l: 60, r: 20, t: 30, b: 45 },
+    margin: { l: 60, r: 20, t: 20, b: 45 },
     legend: { x: 0.72, y: 0.98, xanchor: "left", yanchor: "top",
               bgcolor: "rgba(255,255,255,0.9)", bordercolor: "#ccc",
               borderwidth: 1 },
@@ -284,23 +316,169 @@ function buildPlot() {
                  { responsive: true, displayModeBar: false });
 }
 
+// ------------- absorptance + AM1.5G plot -------------
+function buildAbsPlot() {
+  const wl = EXTRAS.wl;
+  const am = EXTRAS.am15g;
+  const startAbs = EXTRAS.absorptance.high.A;   // bad-start = high Eg
+
+  // AM1.5G filled to zero (background)
+  const traces = [
+    { x: wl, y: am, name: "AM1.5G",
+      line: { color: "#f0c040", width: 1 },
+      fill: "tozeroy", fillcolor: "rgba(240,192,64,0.25)",
+      yaxis: "y2", hoverinfo: "name" },
+    // Absorbed part = am15g * absorptance, shaded
+    { x: wl, y: am.map((v, i) => v * startAbs[i]),
+      name: "Absorbed", line: { color: "#8e44ad", width: 0.5 },
+      fill: "tozeroy", fillcolor: "rgba(122,91,147,0.55)",
+      yaxis: "y2", hoverinfo: "name" },
+    // Absorptance curve (right axis)
+    { x: wl, y: startAbs, name: "Absorptance",
+      line: { color: "#0072b2", width: 2 }, yaxis: "y",
+      hovertemplate: "λ=%{x} nm<br>A=%{y:.2f}<extra></extra>" },
+  ];
+
+  const layout = {
+    xaxis: { title: "Wavelength (nm)", range: [300, 1250],
+             showline: true, mirror: true, ticks: "inside", zeroline: false },
+    yaxis: { title: "Absorptance", range: [0, 1.05], side: "left",
+             showline: true, ticks: "inside", zeroline: false,
+             titlefont: { color: "#0072b2" }, tickfont: { color: "#0072b2" } },
+    yaxis2: { title: "AM1.5G (W m⁻² nm⁻¹)", overlaying: "y", side: "right",
+              range: [0, 1.8], showgrid: false, ticks: "inside",
+              titlefont: { color: "#c08000" }, tickfont: { color: "#c08000" } },
+    margin: { l: 55, r: 55, t: 15, b: 45 },
+    legend: { x: 0.98, y: 0.98, xanchor: "right", yanchor: "top",
+              bgcolor: "rgba(255,255,255,0.9)", bordercolor: "#ccc",
+              borderwidth: 1 },
+    font: { family: "Arial", size: 12, color: "#111" },
+    plot_bgcolor: "white", paper_bgcolor: "white",
+    hovermode: "x unified",
+  };
+
+  Plotly.newPlot("absplot", traces, layout,
+                 { responsive: true, displayModeBar: false });
+}
+
+// ------------- energy-level SVG (redraw on Eg change) -------------
+function drawEnergyDiagram(egEv) {
+  const midgap = 4.715;
+  const absLumo = midgap - egEv / 2;
+  const absHomo = midgap + egEv / 2;
+  const etlLumo = absLumo;
+  const etlHomo = absHomo + 1.0;    // blocks holes by 1 eV
+  const htlLumo = absLumo - 1.0;    // blocks electrons by 1 eV
+  const htlHomo = absHomo;
+  const tcoWf = etlLumo;
+  const auWf  = htlHomo;
+
+  const svg = document.getElementById("ediagram");
+  const W = 600, H = 320;
+  const M = { l: 46, r: 12, t: 20, b: 30 };
+  const eMin = -7.6, eMax = -1.9;    // fixed y range so shifts are visible
+  const yOf = (e) => M.t + (eMax - e) / (eMax - eMin) * (H - M.t - M.b);
+  // The x positions of each layer's rectangle
+  const layers = [
+    { key: "tco",  label: "TCO", top: -tcoWf, bot: -tcoWf, fill: "var(--tco)", stroke: "#7c72b8" },
+    { key: "etl",  label: "ETL", top: -etlLumo, bot: -etlHomo, fill: "none",   stroke: "#3ea15a" },
+    { key: "abs",  label: "Absorber", top: -absLumo, bot: -absHomo, fill: "none", stroke: "#7a5b93" },
+    { key: "htl",  label: "HTL", top: -htlLumo, bot: -htlHomo, fill: "none",   stroke: "#dc963c" },
+    { key: "au",   label: "Au",  top: -auWf, bot: -auWf, fill: "var(--au)",    stroke: "#a68b16" },
+  ];
+  // Widths (relative)
+  const widths = [0.8, 1.1, 2.2, 1.1, 0.7];
+  const gap = 8;
+  const totalWunit = widths.reduce((a, b) => a + b, 0);
+  const plotW = W - M.l - M.r - gap * (layers.length - 1);
+  let cursor = M.l;
+  const boxes = layers.map((L, i) => {
+    const w = plotW * widths[i] / totalWunit;
+    const x0 = cursor;
+    const x1 = cursor + w;
+    cursor = x1 + gap;
+    return { ...L, x0, x1 };
+  });
+
+  // Build SVG content
+  const yAxis = [];
+  for (let e = -2; e >= -7; e--) {
+    const y = yOf(e);
+    yAxis.push(
+      `<line x1="${M.l}" x2="${W - M.r}" y1="${y}" y2="${y}" stroke="#eee" stroke-width="0.5"/>`,
+      `<text x="${M.l - 6}" y="${y + 4}" text-anchor="end" font-size="11" fill="#666">${e}</text>`
+    );
+  }
+  yAxis.push(
+    `<line x1="${M.l}" x2="${M.l}" y1="${M.t}" y2="${H - M.b}" stroke="#333" stroke-width="0.8"/>`,
+    `<text x="14" y="${(M.t + H - M.b) / 2}" font-size="11" fill="#333" ` +
+    `transform="rotate(-90 14 ${(M.t + H - M.b) / 2})" text-anchor="middle">Energy (eV)</text>`
+  );
+
+  const boxSvg = boxes.map(b => {
+    const isMetal = (b.top === b.bot);
+    if (isMetal) {
+      // Thick horizontal bar at the WF
+      const y = yOf(b.top);
+      return `
+        <line x1="${b.x0}" x2="${b.x1}" y1="${y}" y2="${y}"
+              stroke="${b.stroke}" stroke-width="3.5"/>
+        <text x="${(b.x0 + b.x1) / 2}" y="${y + 15}" text-anchor="middle"
+              font-size="11" fill="#333" font-weight="600">${b.label}</text>
+        <text x="${(b.x0 + b.x1) / 2}" y="${y - 6}" text-anchor="middle"
+              font-size="10" fill="#333">${b.top.toFixed(2)}</text>
+      `;
+    } else {
+      const yT = yOf(b.top);
+      const yB = yOf(b.bot);
+      const cy = (yT + yB) / 2;
+      return `
+        <rect x="${b.x0}" y="${yT}" width="${b.x1 - b.x0}" height="${yB - yT}"
+              fill="${b.fill}" stroke="${b.stroke}" stroke-width="2"/>
+        <text x="${(b.x0 + b.x1) / 2}" y="${cy + 4}" text-anchor="middle"
+              font-size="11" fill="#333" font-weight="600">${b.label}</text>
+        <text x="${(b.x0 + b.x1) / 2}" y="${yT - 4}" text-anchor="middle"
+              font-size="10" fill="#333">${b.top.toFixed(2)}</text>
+        <text x="${(b.x0 + b.x1) / 2}" y="${yB + 12}" text-anchor="middle"
+              font-size="10" fill="#333">${b.bot.toFixed(2)}</text>
+      `;
+    }
+  }).join("");
+
+  // Eg annotation on absorber
+  const abs = boxes[2];
+  const egY = (yOf(-absLumo) + yOf(-absHomo)) / 2;
+  const egText = `<text x="${abs.x1 + 6}" y="${egY + 4}" font-size="11" ` +
+    `fill="#0072b2" font-weight="600">E_g = ${egEv.toFixed(2)} eV</text>`;
+
+  svg.innerHTML = yAxis.join("") + boxSvg + egText;
+}
+
+// ------------- update on any control change -------------
 function update() {
   const cur = currentKey();
-  state = cur;
   const run = GRID.runs[cur.key];
 
-  document.getElementById("egVal").textContent =
-    `${GRID.meta.Eg.find(e => e.label === cur.eg).value.toFixed(2)} eV`;
+  document.getElementById("egVal").textContent  = `${cur.egEv.toFixed(2)} eV`;
   document.getElementById("LVal").textContent   = `${cur.L} nm`;
   document.getElementById("tauVal").textContent = `${cur.tau} ns`;
   document.getElementById("SVal").textContent   = `${sci(cur.S)} cm/s`;
   document.getElementById("muVal").textContent  = `${cur.mu} cm² V⁻¹ s⁻¹`;
 
+  // Update energy diagram
+  drawEnergyDiagram(cur.egEv);
+
+  // Update absorptance overlay
+  const A = EXTRAS.absorptance[cur.egLabel].A;
+  const am = EXTRAS.am15g;
+  const absorbed = am.map((v, i) => v * A[i]);
+  Plotly.restyle("absplot",
+    { y: [am, absorbed, A] },
+    [0, 1, 2]);
+
   if (!run) {
-    document.getElementById("kfJsc").textContent = "n/a";
-    document.getElementById("kfVoc").textContent = "n/a";
-    document.getElementById("kfFF").textContent  = "n/a";
-    document.getElementById("kfPCE").textContent = "n/a";
+    ["kfJsc", "kfVoc", "kfFF", "kfPCE"].forEach(id =>
+      document.getElementById(id).textContent = "n/a");
     return;
   }
 
@@ -310,9 +488,7 @@ function update() {
   document.getElementById("kfPCE").textContent = fmt(run.PCE, 2);
 
   const V = GRID.V;
-  Plotly.restyle("plot",
-    { y: [run.J,          jvToP(V, run.J)] },
-    [4, 5]);
+  Plotly.restyle("plot", { y: [run.J, jvToP(V, run.J)] }, [4, 5]);
 
   const bad = GRID.runs[GRID.meta.bad_key].PCE;
   const ideal = GRID.runs[GRID.meta.ideal_key].PCE;
@@ -322,7 +498,7 @@ function update() {
     `PCE: ${run.PCE.toFixed(2)}%   (bad ${bad.toFixed(1)}% → ideal ${ideal.toFixed(1)}%)`;
 }
 
-loadGrid();
+loadAll();
 </script>
 
 </body>
