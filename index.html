@@ -217,7 +217,7 @@ let EXTRAS = null;
 // Rs / Rsh are applied purely as post-processing on the intrinsic (V,J).
 // Values in Ohm*cm^2. Rsh = Infinity = no shunt.
 const RS_LIST  = [0, 2, 5, 10];
-const RSH_LIST = [Infinity, 500, 100, 50];
+const RSH_LIST = [50, 100, 500, Infinity];
 
 // Apply series + shunt to an intrinsic (V_int in V, J_int in mA/cm^2).
 // V_terminal = V_int + J_after * Rs / 1000
@@ -277,6 +277,8 @@ async function loadAll() {
   EXTRAS = e;
   initControls();
   setFromKey(GRID.meta.bad_key);
+  document.getElementById("RsSel").value  = 0;                     // Rs = 0 (best)
+  document.getElementById("RshSel").value = RSH_LIST.length - 1;   // Rsh = ∞ (best)
   buildJVPlot();
   buildAbsPlot();
   drawEnergyDiagram(currentKey().egEv);
@@ -303,8 +305,8 @@ function initControls() {
 
   document.getElementById("setBad").onclick = () => {
     setFromKey(GRID.meta.bad_key);
-    document.getElementById("RsSel").value  = 0;
-    document.getElementById("RshSel").value = 0;
+    document.getElementById("RsSel").value  = 0;                     // Rs = 0 (best)
+    document.getElementById("RshSel").value = RSH_LIST.length - 1;   // Rsh = ∞ (best)
     update();
   };
 
@@ -516,7 +518,7 @@ function drawEnergyDiagram(egEv) {
       const cy = (yT + yB) / 2;
       const subLabel = (b.key === "abs")
         ? `<text x="${(b.x0 + b.x1) / 2}" y="${cy + 18}" text-anchor="middle"
-                 font-size="11" fill="#333" font-weight="600">E_g = ${egEv.toFixed(2)} eV</text>`
+                 font-size="11" fill="#333" font-weight="600"><tspan font-style="italic">E</tspan><tspan font-size="8" dy="2">g</tspan><tspan dy="-2"> = ${egEv.toFixed(2)} eV</tspan></text>`
         : "";
       const yLabel = (b.key === "abs") ? cy - 2 : cy + 4;
       return `
