@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Perovskite solar-cell JV explorer</title>
+<title>n-i-p solar cell JV explorer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
@@ -88,19 +88,17 @@
 <body>
 
 <header>
-  <h1>Perovskite solar-cell JV explorer</h1>
-  <p>Drag the sliders to fix the five deliberate flaws in the bad-start
-     device and reach the ideal target. Curves come from pre-computed
+  <h1>n-i-p solar cell JV explorer</h1>
+  <p>Drag the sliders to fix the deliberate flaws in the starting device
+     and reach the best possible JV. Curves come from pre-computed
      Setfos&nbsp;6.0 drift-diffusion simulations.</p>
 </header>
 
 <section class="schematic">
   <div class="card">
-    <div class="cap">Device stack</div>
     <img src="device_stack.png" alt="device stack schematic">
   </div>
   <div class="card">
-    <div class="cap">Energy-level diagram (updates with bandgap)</div>
     <svg id="ediagram" viewBox="0 0 600 320" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
 </section>
@@ -155,8 +153,8 @@
     </div>
 
     <div class="buttons">
-      <button class="bad"  id="setBad">Reset to bad</button>
-      <button class="good" id="setIdeal">Set to ideal</button>
+      <button class="bad"  id="setBad">Reset</button>
+      <button class="good" id="toggleBest">Show best JV</button>
     </div>
 
     <div class="kf">
@@ -171,8 +169,9 @@
       <div class="txt" id="progTxt">Progress toward ideal PCE</div>
     </div>
 
-    <p class="hint">Bad-start (red) and ideal-target (green) reference curves
-       are always shown. Your current choice is the blue curve.</p>
+    <p class="hint">Your current device is the blue curve. Click
+       "Show best JV" to compare it with the best JV achievable on this
+       stack (parameters not revealed).</p>
   </div>
 
   <div class="plots">
@@ -300,17 +299,19 @@ function initControls() {
   bind("RsSel",  RS_LIST,         v => `${v}`,            "RsTicks");
   bind("RshSel", RSH_LIST,        v => isFinite(v) ? `${v}` : "∞", "RshTicks");
 
-  document.getElementById("setBad").onclick   = () => {
+  document.getElementById("setBad").onclick = () => {
     setFromKey(GRID.meta.bad_key);
     document.getElementById("RsSel").value  = 0;
     document.getElementById("RshSel").value = 0;
     update();
   };
-  document.getElementById("setIdeal").onclick = () => {
-    setFromKey(GRID.meta.ideal_key);
-    document.getElementById("RsSel").value  = 0;
-    document.getElementById("RshSel").value = 0;
-    update();
+
+  let bestVisible = false;
+  const bestBtn = document.getElementById("toggleBest");
+  bestBtn.onclick = () => {
+    bestVisible = !bestVisible;
+    Plotly.restyle("plot", { visible: bestVisible }, [0, 1]);
+    bestBtn.textContent = bestVisible ? "Hide best JV" : "Show best JV";
   };
 }
 
@@ -349,17 +350,14 @@ function buildJVPlot() {
   const bad   = GRID.runs[GRID.meta.bad_key];
   const ideal = GRID.runs[GRID.meta.ideal_key];
 
+  // Trace order: 0/1 = ideal (hidden by default), 2/3 = live "your device"
   const traces = [
-    { x: V, y: bad.J, name: "Bad start", xaxis: "x", yaxis: "y2",
-      line: { color: "#d55e00", width: 1.2, dash: "dot" }, hoverinfo: "name" },
-    { x: V, y: jvToP(V, bad.J), name: "Bad start (P)",
-      xaxis: "x", yaxis: "y", line: { color: "#d55e00", width: 1.2, dash: "dot" },
-      showlegend: false, hoverinfo: "skip" },
-    { x: V, y: ideal.J, name: "Ideal target", xaxis: "x", yaxis: "y2",
-      line: { color: "#009e73", width: 1.2, dash: "dot" }, hoverinfo: "name" },
-    { x: V, y: jvToP(V, ideal.J), name: "Ideal target (P)",
-      xaxis: "x", yaxis: "y", line: { color: "#009e73", width: 1.2, dash: "dot" },
-      showlegend: false, hoverinfo: "skip" },
+    { x: V, y: ideal.J, name: "Best JV", xaxis: "x", yaxis: "y2",
+      line: { color: "#009e73", width: 1.5, dash: "dot" }, hoverinfo: "name",
+      visible: false },
+    { x: V, y: jvToP(V, ideal.J), name: "Best JV (P)",
+      xaxis: "x", yaxis: "y", line: { color: "#009e73", width: 1.5, dash: "dot" },
+      showlegend: false, hoverinfo: "skip", visible: false },
     { x: V, y: bad.J, name: "Your device", xaxis: "x", yaxis: "y2",
       line: { color: "#0072b2", width: 2.4 } },
     { x: V, y: jvToP(V, bad.J), name: "Your device (P)",
@@ -514,11 +512,17 @@ function drawEnergyDiagram(egEv) {
       const yT = yOf(b.top);
       const yB = yOf(b.bot);
       const cy = (yT + yB) / 2;
+      const subLabel = (b.key === "abs")
+        ? `<text x="${(b.x0 + b.x1) / 2}" y="${cy + 18}" text-anchor="middle"
+                 font-size="11" fill="#333" font-weight="600">E_g = ${egEv.toFixed(2)} eV</text>`
+        : "";
+      const yLabel = (b.key === "abs") ? cy - 2 : cy + 4;
       return `
         <rect x="${b.x0}" y="${yT}" width="${b.x1 - b.x0}" height="${yB - yT}"
               fill="${b.fill}" stroke="${b.stroke}" stroke-width="2"/>
-        <text x="${(b.x0 + b.x1) / 2}" y="${cy + 4}" text-anchor="middle"
+        <text x="${(b.x0 + b.x1) / 2}" y="${yLabel}" text-anchor="middle"
               font-size="11" fill="#333" font-weight="600">${b.label}</text>
+        ${subLabel}
         <text x="${(b.x0 + b.x1) / 2}" y="${yT - 4}" text-anchor="middle"
               font-size="10" fill="#333">${b.top.toFixed(2)}</text>
         <text x="${(b.x0 + b.x1) / 2}" y="${yB + 12}" text-anchor="middle"
@@ -527,13 +531,7 @@ function drawEnergyDiagram(egEv) {
     }
   }).join("");
 
-  // Eg annotation on absorber
-  const abs = boxes[2];
-  const egY = (yOf(-absLumo) + yOf(-absHomo)) / 2;
-  const egText = `<text x="${abs.x1 + 6}" y="${egY + 4}" font-size="11" ` +
-    `fill="#0072b2" font-weight="600">E_g = ${egEv.toFixed(2)} eV</text>`;
-
-  svg.innerHTML = yAxis.join("") + boxSvg + egText;
+  svg.innerHTML = yAxis.join("") + boxSvg;
 }
 
 // ------------- update on any control change -------------
@@ -576,7 +574,7 @@ function update() {
 
   Plotly.restyle("plot",
     { x: [Vt, Vt], y: [Jt, jvToP(Vt, Jt)] },
-    [4, 5]);
+    [2, 3]);
 
   const bad = GRID.runs[GRID.meta.bad_key].PCE;
   const ideal = GRID.runs[GRID.meta.ideal_key].PCE;
