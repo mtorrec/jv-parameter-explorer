@@ -523,8 +523,18 @@ function buildJVPlot() {
               title: "J (mA/cm²)", showline: true, mirror: true, ticks: "inside",
               zeroline: false },
     shapes: [
+      // full box around top (power) subplot
+      { type: "rect", xref: "paper", yref: "paper",
+        x0: 0.08, x1: 0.98, y0: 0.66, y1: 0.98,
+        line: { color: "#111", width: 1 }, fillcolor: "rgba(0,0,0,0)" },
+      // full box around bottom (JV) subplot
+      { type: "rect", xref: "paper", yref: "paper",
+        x0: 0.08, x1: 0.98, y0: 0.08, y1: 0.60,
+        line: { color: "#111", width: 1 }, fillcolor: "rgba(0,0,0,0)" },
+      // J = 0 reference line
       { type: "line", xref: "x", yref: "y2", x0: -0.05, x1: 1.5, y0: 0, y1: 0,
         line: { color: "#888", width: 0.5 } },
+      // V = 0 reference line
       { type: "line", xref: "x", yref: "y2", x0: 0, x1: 0, y0: -30, y1: 3,
         line: { color: "#888", width: 0.5 } },
     ],
@@ -572,6 +582,7 @@ function buildAbsPlot() {
              titlefont: { color: "#0072b2" }, tickfont: { color: "#0072b2" } },
     yaxis2: { title: "AM1.5G (W m⁻² nm⁻¹)", overlaying: "y", side: "right",
               range: [0, 1.8], showgrid: false, ticks: "inside",
+              showline: true, mirror: true,
               titlefont: { color: "#c08000" }, tickfont: { color: "#c08000" } },
     margin: { l: 55, r: 55, t: 15, b: 45 },
     legend: { x: 0.98, y: 0.98, xanchor: "right", yanchor: "top",
