@@ -361,6 +361,7 @@ function initControls() {
 // ------------- sweep view ("See all") -------------
 let expandedParam = null;
 let sweepTraceCount = 0;
+let sweepAbsTraceCount = 0;
 
 function buildSweepData(param) {
   const cur = currentKey();
@@ -418,11 +419,20 @@ function buildSweepData(param) {
 }
 
 function hideSweep() {
-  if (sweepTraceCount === 0) return;
-  const base = 4; // traces 0-3 are the persistent ones
-  const indices = Array.from({ length: sweepTraceCount }, (_, i) => base + i);
-  Plotly.deleteTraces("plot", indices);
-  sweepTraceCount = 0;
+  if (sweepTraceCount > 0) {
+    const base = 4; // JV plot traces 0-3 are the persistent ones
+    const indices = Array.from({ length: sweepTraceCount }, (_, i) => base + i);
+    Plotly.deleteTraces("plot", indices);
+    sweepTraceCount = 0;
+  }
+  if (sweepAbsTraceCount > 0) {
+    const base = 3; // absplot traces 0-2 are the persistent ones
+    const indices = Array.from({ length: sweepAbsTraceCount }, (_, i) => base + i);
+    Plotly.deleteTraces("absplot", indices);
+    sweepAbsTraceCount = 0;
+    // Restore the original single-Eg absorbed shading + absorptance
+    Plotly.restyle("absplot", { visible: true }, [1, 2]);
+  }
 }
 
 function drawSweep(param) {
@@ -444,6 +454,24 @@ function drawSweep(param) {
   });
   Plotly.addTraces("plot", traces);
   sweepTraceCount = traces.length;
+
+  // For the bandgap sweep, also overlay absorptance curves on the absplot.
+  if (param === "Eg") {
+    Plotly.restyle("absplot", { visible: false }, [1, 2]);
+    const absTraces = [];
+    const M = GRID.meta.Eg.length;
+    GRID.meta.Eg.forEach((o, i) => {
+      const col = viridis(M > 1 ? i / (M - 1) : 0.5);
+      absTraces.push({
+        x: EXTRAS.wl, y: EXTRAS.absorptance[o.label].A,
+        name: `Eg = ${o.value.toFixed(2)} eV`,
+        line: { color: col, width: 1.5 }, yaxis: "y",
+        hovertemplate: "λ=%{x} nm<br>A=%{y:.2f}<extra></extra>",
+      });
+    });
+    Plotly.addTraces("absplot", absTraces);
+    sweepAbsTraceCount = absTraces.length;
+  }
 }
 
 function toggleSweep(param) {
